@@ -13,9 +13,17 @@ Reachable via Ingress:
   {{ $scheme }}://{{ .host }}{{ $.Values.config.mcpPath }}
   {{- end }}
 {{- end }}
+{{- else if .Values.httpRoute.enabled }}
+
+Reachable via Gateway API HTTPRoute (attached to: {{ range $i, $p := .Values.httpRoute.parentRefs }}{{ if $i }}, {{ end }}{{ $p.name }}{{ end }}):
+{{- range .Values.httpRoute.hostnames }}
+  https://{{ . }}{{ $.Values.config.mcpPath }}
+{{- else }}
+  (no hostnames set — the route matches all hostnames on its Gateway listener)
+{{- end }}
 {{- else }}
 
-No Ingress is enabled. Port-forward to reach the service locally:
+No Ingress or HTTPRoute is enabled. Port-forward to reach the service locally:
 
   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "bring-hermes.fullname" . }} 8080:{{ .Values.service.port }}
 

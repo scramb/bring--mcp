@@ -84,6 +84,33 @@ ingress:
   #    hosts:
   #      - bring-hermes.example.com
 
+# Gateway API HTTPRoute — a modern alternative to `ingress`. Enable this OR
+# `ingress`, not both. Requires the Gateway API CRDs and an existing Gateway in
+# the cluster (e.g. Envoy Gateway, Istio, Cilium, NGINX Gateway Fabric). TLS is
+# configured on the Gateway listener, not here.
+httpRoute:
+  enabled: false
+  # apiVersion override, if your cluster still serves v1beta1.
+  apiVersion: gateway.networking.k8s.io/v1
+  annotations: {}
+  # The Gateway(s) this route attaches to. REQUIRED when enabled.
+  parentRefs: []
+    # - name: my-gateway
+    #   namespace: gateway-system   # optional (defaults to release namespace)
+    #   sectionName: https          # optional: a specific Gateway listener
+    #   port: 443                   # optional
+  hostnames: []
+    # - bring-hermes.example.com
+  # Path matches for the default rule. The backend is this chart's Service,
+  # wired automatically.
+  matches:
+    - path:
+        type: PathPrefix
+        value: /
+  # Advanced: provide complete rules (each incl. its own backendRefs) to fully
+  # replace the single default rule built from `matches` above.
+  rules: []
+
 resources:
   requests:
     cpu: 50m

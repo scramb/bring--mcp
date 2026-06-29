@@ -118,7 +118,9 @@ key in the `Authorization` header:
 
 A Helm chart lives in [`helm/bring-hermes/`](helm/bring-hermes/) — see its
 [README](helm/bring-hermes/README.md) for the full values reference. TLS is
-terminated at the Ingress (cert-manager + Let's Encrypt in the example).
+terminated at the Ingress (cert-manager + Let's Encrypt in the example), or you
+can expose it via the Gateway API instead — set `httpRoute.enabled=true` with a
+`parentRefs` Gateway (see the chart README).
 
 ```bash
 # Credentials as a managed Secret (recommended)
@@ -131,8 +133,8 @@ kubectl -n bring-hermes create secret generic bring-hermes-credentials \
 helm install bring-hermes ./helm/bring-hermes \
   --namespace bring-hermes \
   --set bring.existingSecret=bring-hermes-credentials \
-  --set image.repository=ghcr.io/your-org/bring-hermes \
-  --set image.tag=0.1.0 \
+  --set image.repository=ghcr.io/scramb/bring--mcp \
+  --set image.tag=0.2.0 \
   --set ingress.enabled=true \
   --set ingress.hosts[0].host=bring-hermes.example.com
 ```

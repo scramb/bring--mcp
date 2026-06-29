@@ -80,6 +80,34 @@ helm upgrade --install bring-hermes ./helm/bring-hermes \
 The MCP endpoint is then `https://bring-hermes.example.com/mcp` (send
 `Authorization: Bearer <MCP_API_KEY>`).
 
+## Expose via Gateway API (HTTPRoute) instead of Ingress
+
+If your cluster uses the [Gateway API](https://gateway-api.sigs.k8s.io/) (Envoy
+Gateway, Istio, Cilium, NGINX Gateway Fabric, …), enable `httpRoute` instead of
+`ingress` — they are **mutually exclusive** (enabling both fails the render).
+TLS is configured on the Gateway listener, not in the chart.
+
+```yaml
+# my-values.yaml
+ingress:
+  enabled: false
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: my-gateway          # an existing Gateway
+      namespace: gateway-system # optional
+      sectionName: https        # optional: a specific listener
+  hostnames:
+    - bring-hermes.example.com
+  # The default rule routes "/" to this chart's Service. Override `matches` for a
+  # different path, or set `rules` for full control (incl. your own backendRefs).
+```
+
+```bash
+helm upgrade --install bring-hermes ./helm/bring-hermes \
+  -n bring-hermes -f my-values.yaml
+```
+
 ## Values
 
 | Key | Default | Description |
@@ -106,6 +134,13 @@ The MCP endpoint is then `https://bring-hermes.example.com/mcp` (send
 | `ingress.annotations` | `{}` | Ingress annotations (e.g. cert-manager issuer). |
 | `ingress.hosts` | `bring-hermes.example.com` | Host/path rules. |
 | `ingress.tls` | `[]` | TLS config (secretName + hosts). |
+| `httpRoute.enabled` | `false` | Create a Gateway API HTTPRoute (mutually exclusive with `ingress`). |
+| `httpRoute.apiVersion` | `gateway.networking.k8s.io/v1` | HTTPRoute API version (override for `v1beta1`). |
+| `httpRoute.parentRefs` | `[]` | Gateway(s) to attach to. **Required** when enabled. |
+| `httpRoute.hostnames` | `[]` | Hostnames the route serves (empty = all on the listener). |
+| `httpRoute.matches` | `PathPrefix /` | Path matches for the default rule (backend = this Service). |
+| `httpRoute.annotations` | `{}` | HTTPRoute annotations. |
+| `httpRoute.rules` | `[]` | Advanced: full rules incl. own backendRefs (replaces the default rule). |
 | `resources` | `50m/128Mi` … `500m/256Mi` | Requests/limits. |
 | `autoscaling.enabled` | `false` | Enable HPA. |
 | `autoscaling.minReplicas` / `maxReplicas` | `2` / `5` | HPA bounds. |
