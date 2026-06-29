@@ -4,10 +4,10 @@
 replicaCount: 2
 
 image:
-  repository: ghcr.io/your-org/bring-hermes
+  repository: ghcr.io/scramb/bring--mcp
   pullPolicy: IfNotPresent
   # Defaults to the chart's appVersion when empty.
-  tag: ""
+  tag: "0.3.0"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -21,7 +21,7 @@ bring:
   # Name of a pre-existing Secret containing the keys BRING_EMAIL,
   # BRING_PASSWORD and MCP_API_KEY. When set, the chart does NOT create a Secret
   # and the three fields below are ignored.
-  existingSecret: ""
+  existingSecret: "bring-hermes-credentials"
   email: ""
   password: ""
   # One or more API keys clients must present (comma-separated for rotation).
@@ -53,10 +53,16 @@ podLabels: {}
 
 podSecurityContext:
   runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
   seccompProfile:
     type: RuntimeDefault
 
 securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
   capabilities:
@@ -89,18 +95,18 @@ ingress:
 # the cluster (e.g. Envoy Gateway, Istio, Cilium, NGINX Gateway Fabric). TLS is
 # configured on the Gateway listener, not here.
 httpRoute:
-  enabled: false
+  enabled: true
   # apiVersion override, if your cluster still serves v1beta1.
   apiVersion: gateway.networking.k8s.io/v1
   annotations: {}
   # The Gateway(s) this route attaches to. REQUIRED when enabled.
-  parentRefs: []
-    # - name: my-gateway
-    #   namespace: gateway-system   # optional (defaults to release namespace)
-    #   sectionName: https          # optional: a specific Gateway listener
+  parentRefs:
+    - name: istio-ingress
+      namespace: istio-system   # optional (defaults to release namespace)
+    #  sectionName: https          # optional: a specific Gateway listener
     #   port: 443                   # optional
-  hostnames: []
-    # - bring-hermes.example.com
+  hostnames:
+    - bring.meininger.cloud
   # Path matches for the default rule. The backend is this chart's Service,
   # wired automatically.
   matches:

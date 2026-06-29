@@ -32,13 +32,15 @@ ENV PYTHONUNBUFFERED=1 \
     HOST=0.0.0.0 \
     PORT=8080
 
-RUN groupadd --system app && useradd --system --gid app --home-dir /app app
+# Use a fixed NUMERIC uid/gid so Kubernetes `runAsNonRoot` can verify non-root.
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid 10001 --home-dir /app --shell /usr/sbin/nologin app
 
 WORKDIR /app
-COPY --from=builder --chown=app:app /app/.venv /app/.venv
-COPY --from=builder --chown=app:app /app/src /app/src
+COPY --from=builder --chown=10001:10001 /app/.venv /app/.venv
+COPY --from=builder --chown=10001:10001 /app/src /app/src
 
-USER app
+USER 10001:10001
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

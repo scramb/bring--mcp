@@ -20,3 +20,4 @@ dist/
 # Local Helm values that may contain secrets
 helm/**/values.local.yaml
 secrets.yaml
+
