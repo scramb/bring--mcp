@@ -1,0 +1,127 @@
+# Default values for bring-hermes.
+# This is a YAML-formatted file. Override with `--set key=value` or `-f my-values.yaml`.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/your-org/bring-hermes
+  pullPolicy: IfNotPresent
+  # Defaults to the chart's appVersion when empty.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# --- Bring! account + MCP auth --------------------------------------------
+# These become a Secret (BRING_EMAIL, BRING_PASSWORD, MCP_API_KEY) consumed by
+# the pod. For production, prefer `existingSecret` so credentials never live in
+# values files / Helm release history.
+bring:
+  # Name of a pre-existing Secret containing the keys BRING_EMAIL,
+  # BRING_PASSWORD and MCP_API_KEY. When set, the chart does NOT create a Secret
+  # and the three fields below are ignored.
+  existingSecret: ""
+  email: ""
+  password: ""
+  # One or more API keys clients must present (comma-separated for rotation).
+  apiKey: ""
+
+# --- Non-secret app config (rendered into a ConfigMap) --------------------
+config:
+  # Container port the app binds to.
+  port: 8080
+  mcpPath: /mcp
+  logLevel: INFO
+  # MCP response mode. true = plain-JSON Streamable HTTP responses (default).
+  # Set to false only if you need SSE-framed responses for streaming clients.
+  jsonResponse: true
+  # Default shopping list (name or UUID). Empty = use the first list.
+  defaultList: ""
+
+# Extra environment variables (list of {name, value} / valueFrom).
+extraEnv: []
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+    # Responses are plain-JSON Streamable HTTP (no SSE), so no proxy buffering or
+    # timeout tweaks are required. Add TLS via cert-manager if you use it:
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: bring-hermes.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: bring-hermes-tls
+  #    hosts:
+  #      - bring-hermes.example.com
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 20
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 6
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 0
+
+# Extra volumes / mounts (a writable emptyDir for /tmp is always added because
+# the root filesystem is read-only).
+extraVolumes: []
+extraVolumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

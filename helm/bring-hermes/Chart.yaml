@@ -1,0 +1,26 @@
+apiVersion: v2
+name: bring-hermes
+description: >-
+  MCP server for the Bring! shopping list API — add items and whole recipes
+  (with correct quantities) to Bring! over the MCP Streamable HTTP transport,
+  behind an API key. Built on the bring-api library by miaucl.
+type: application
+# Chart version — bump on chart changes.
+version: 0.1.0
+# Version of the app (container image) this chart deploys by default.
+appVersion: "0.1.0"
+home: https://github.com/your-org/bring-hermes
+sources:
+  - https://github.com/your-org/bring-hermes
+  - https://github.com/miaucl/bring-api
+keywords:
+  - mcp
+  - model-context-protocol
+  - bring
+  - shopping-list
+  - home-automation
+maintainers:
+  - name: your-org
+annotations:
+  # Credit where credit is due — the Bring! API client this server is built on.
+  bring-hermes/upstream-library: "bring-api by Cyrill Raccaud (miaucl) & Manfred Dennerlein Rodelo — https://github.com/miaucl/bring-api"

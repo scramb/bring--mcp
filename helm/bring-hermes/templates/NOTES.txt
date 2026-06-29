@@ -1,0 +1,45 @@
+bring-hermes is deployed. 🛒
+
+The MCP endpoint is served at path "{{ .Values.config.mcpPath }}" and requires an
+API key (Authorization: Bearer <key>  or  X-API-Key: <key>).
+
+{{- if .Values.ingress.enabled }}
+
+Reachable via Ingress:
+{{- range .Values.ingress.hosts }}
+  {{- $scheme := "http" }}
+  {{- if $.Values.ingress.tls }}{{ $scheme = "https" }}{{- end }}
+  {{- range .paths }}
+  {{ $scheme }}://{{ .host }}{{ $.Values.config.mcpPath }}
+  {{- end }}
+{{- end }}
+{{- else }}
+
+No Ingress is enabled. Port-forward to reach the service locally:
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "bring-hermes.fullname" . }} 8080:{{ .Values.service.port }}
+
+Then the MCP endpoint is at:  http://127.0.0.1:8080{{ .Values.config.mcpPath }}
+{{- end }}
+
+Endpoints:
+  POST {{ .Values.config.mcpPath }}   -> MCP (requires API key)
+  GET  /healthz       -> liveness (unauthenticated)
+  GET  /readyz        -> 200 once logged in to Bring!, else 503
+
+{{- if not .Values.bring.existingSecret }}
+
+NOTE: credentials were taken from chart values and stored in a Secret named
+"{{ include "bring-hermes.fullname" . }}". For production, set
+`bring.existingSecret` to reference a Secret you manage instead.
+{{- else }}
+
+Using existing Secret: {{ .Values.bring.existingSecret }}
+(must contain keys: BRING_EMAIL, BRING_PASSWORD, MCP_API_KEY)
+{{- end }}
+
+Run the bundled connection test:
+  helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+
+Built on the bring-api library by Cyrill Raccaud (miaucl) & Manfred Dennerlein
+Rodelo — https://github.com/miaucl/bring-api  💙

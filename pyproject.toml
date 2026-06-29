@@ -1,0 +1,39 @@
+[project]
+name = "bring-hermes"
+version = "0.1.0"
+description = "MCP server exposing the Bring! shopping list API (recipes with correct quantities) over Streamable HTTP."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "bring-hermes" }]
+keywords = ["mcp", "bring", "shopping-list", "model-context-protocol"]
+dependencies = [
+    "bring-api>=1.1.2",
+    "mcp>=1.28.1",
+    "uvicorn[standard]>=0.30",
+    "aiohttp>=3.10",
+    "starlette>=0.40",
+    "pydantic>=2.7",
+]
+
+[project.scripts]
+bring-hermes = "bring_hermes.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bring_hermes"]
+
+[dependency-groups]
+dev = ["ruff>=0.6", "mypy>=1.11"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+ignore_missing_imports = true

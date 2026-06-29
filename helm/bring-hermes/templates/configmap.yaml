@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bring-hermes.fullname" . }}
+  labels:
+    {{- include "bring-hermes.labels" . | nindent 4 }}
+data:
+  HOST: "0.0.0.0"
+  PORT: {{ .Values.config.port | quote }}
+  MCP_PATH: {{ .Values.config.mcpPath | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  MCP_JSON_RESPONSE: {{ .Values.config.jsonResponse | quote }}
+  BRING_DEFAULT_LIST: {{ .Values.config.defaultList | quote }}

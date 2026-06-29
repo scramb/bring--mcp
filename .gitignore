@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual envs / tooling
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
+
+# Local Helm values that may contain secrets
+helm/**/values.local.yaml
+secrets.yaml

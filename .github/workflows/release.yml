@@ -1,0 +1,124 @@
+name: Release
+
+# Publishes on a version tag. The git tag drives the version of BOTH artifacts:
+#   - container image:  ghcr.io/<owner>/<repo>:<version>
+#   - Helm chart (OCI): ghcr.io/<owner>/charts/bring-hermes:<version>
+# A leading "v" is stripped so the value is valid SemVer for the Helm chart,
+# e.g. tag "v1.2.3" -> version "1.2.3" for image tag AND chart version.
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "[0-9]*"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute names and version
+        id: vars
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          IMAGE="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not derive a version from tag '${GITHUB_REF_NAME}'"
+            exit 1
+          fi
+          {
+            echo "owner=$OWNER"
+            echo "image=$IMAGE"
+            echo "version=$VERSION"
+            echo "chart_repo=oci://${REGISTRY}/${OWNER}/charts"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing version '$VERSION' from tag '${GITHUB_REF_NAME}'"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata (labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.vars.outputs.image }}
+          # Image tag == git tag (minus "v"); plus a moving "latest".
+          tags: |
+            type=raw,value=${{ steps.vars.outputs.version }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # Drop linux/arm64 if you only target amd64 clusters (faster builds).
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Point the chart at the released image
+        run: |
+          sed -i \
+            "s|repository: ghcr.io/your-org/bring-hermes|repository: ${{ steps.vars.outputs.image }}|" \
+            helm/bring-hermes/values.yaml
+
+      - name: Package chart (version == app-version == git tag)
+        run: |
+          helm package helm/bring-hermes \
+            --version "${{ steps.vars.outputs.version }}" \
+            --app-version "${{ steps.vars.outputs.version }}"
+
+      - name: Push chart to GHCR (OCI)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            helm registry login "${{ env.REGISTRY }}" -u "${{ github.actor }}" --password-stdin
+          helm push \
+            "bring-hermes-${{ steps.vars.outputs.version }}.tgz" \
+            "${{ steps.vars.outputs.chart_repo }}"
+
+      - name: Summary
+        run: |
+          {
+            echo "## Released \`${{ steps.vars.outputs.version }}\`"
+            echo
+            echo "**Image**"
+            echo '```'
+            echo "${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.version }}"
+            echo "${{ steps.vars.outputs.image }}:latest"
+            echo '```'
+            echo "**Chart (OCI)**"
+            echo '```bash'
+            echo "helm install bring-hermes ${{ steps.vars.outputs.chart_repo }}/bring-hermes --version ${{ steps.vars.outputs.version }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
