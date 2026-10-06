@@ -153,6 +153,13 @@ Notes:
 - **Hardening**: runs as non-root with a read-only root filesystem and all
   capabilities dropped.
 
+### On tethys (Flux)
+
+The running instance at `https://bring.meininger.cloud/mcp` is not
+installed with Helm: Flux on the tethys cluster applies
+[`deploy/`](deploy/) from `master`. A rollout there is a tag bump in
+`deploy/kustomization.yaml` — see [`deploy/README.md`](deploy/README.md).
+
 ---
 
 ## Releases (GitHub Actions → GHCR)

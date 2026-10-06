@@ -1,0 +1,83 @@
+# One replica: the MCP transport is stateless, but every replica logs in
+# to Bring! on its own, and one user's shopping list does not need two.
+#
+# The pod joins the Istio ambient mesh (istio.io/dataplane-mode below):
+# tethys only lets the public gateway's identity open a connection to it
+# (base-setup/workloads/bring-mcp/isolation.yaml). Kubelet probes are
+# exempt.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bring-hermes
+  labels:
+    app.kubernetes.io/name: bring-hermes
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bring-hermes
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bring-hermes
+        istio.io/dataplane-mode: ambient
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bring-hermes
+          image: ghcr.io/scramb/bring--mcp
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: MCP_PATH
+              value: /mcp
+            - name: MCP_JSON_RESPONSE
+              value: "true"
+            - name: LOG_LEVEL
+              value: INFO
+          envFrom:
+            - secretRef:
+                name: bring-hermes-credentials
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 3
+          # 503 until the first successful Bring! login.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 20m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
