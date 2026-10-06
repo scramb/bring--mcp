@@ -1,0 +1,35 @@
+# The Postgres cluster of bring-hermes: OAuth clients and tokens (hashed)
+# and the linked Bring! accounts (refresh token encrypted). One instance,
+# 1Gi: a handful of users, a few rows each.
+#
+# bootstrap.initdb creates the database "bring" owned by the role "bring";
+# the app creates its schema at start. CloudNativePG generates the password
+# into the Secret bring-mcp-db-app; nobody but the app needs it.
+#
+# prune: disabled -- a prune would delete the Cluster and, with it, the PVC
+# holding the data. There is no backup; losing it means every user signs
+# in with Bring! once more.
+#
+# Not in the ambient mesh: the operator talks to the instance from its own
+# namespace, and the app reaches it through the service with its password.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: bring-mcp-db
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  instances: 1
+  # Same image as the other clusters on tethys, bumped by hand.
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie
+  bootstrap:
+    initdb:
+      database: bring
+      owner: bring
+  storage:
+    size: 1Gi
+    storageClass: proxmox-local-zfs
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi

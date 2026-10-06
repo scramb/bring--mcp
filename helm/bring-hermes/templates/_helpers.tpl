@@ -60,11 +60,11 @@ Name of the service account to use.
 {{- end -}}
 
 {{/*
-Name of the Secret holding Bring! credentials + API key.
+Name of the Secret holding DATABASE_URL and TOKEN_ENCRYPTION_KEY.
 */}}
 {{- define "bring-hermes.secretName" -}}
-{{- if .Values.bring.existingSecret -}}
-{{- .Values.bring.existingSecret -}}
+{{- if .Values.existingSecret -}}
+{{- .Values.existingSecret -}}
 {{- else -}}
 {{- include "bring-hermes.fullname" . -}}
 {{- end -}}

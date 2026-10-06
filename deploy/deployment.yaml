@@ -1,5 +1,6 @@
-# One replica: the MCP transport is stateless, but every replica logs in
-# to Bring! on its own, and one user's shopping list does not need two.
+# One replica: the Bring! sessions are cached in memory and the login
+# rate limit is per process. The state that matters (OAuth clients,
+# tokens, linked accounts) lives in Postgres (database.yaml).
 #
 # The pod joins the Istio ambient mesh (istio.io/dataplane-mode below):
 # tethys only lets the public gateway's identity open a connection to it
@@ -37,6 +38,22 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            - name: PUBLIC_URL
+              value: https://bring.meininger.cloud
+            # Assembled from the Secret CloudNativePG generates for the role
+            # "bring" (database.yaml); the password is alphanumeric.
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: bring-mcp-db-app
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: bring-mcp-db-app
+                  key: password
+            - name: DATABASE_URL
+              value: postgres://$(DB_USER):$(DB_PASSWORD)@bring-mcp-db-rw:5432/bring?sslmode=require
             - name: PORT
               value: "8080"
             - name: MCP_PATH
@@ -55,7 +72,7 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 20
             timeoutSeconds: 3
-          # 503 until the first successful Bring! login.
+          # 503 while the database is unreachable.
           readinessProbe:
             httpGet:
               path: /readyz

@@ -8,6 +8,9 @@ services:
       - .env
     ports:
       - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -23,3 +26,21 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+
+  postgres:
+    image: docker.io/library/postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bring
+      POSTGRES_PASSWORD: bring
+      POSTGRES_DB: bring
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "bring"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

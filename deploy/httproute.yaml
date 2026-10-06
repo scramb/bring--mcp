@@ -1,12 +1,10 @@
-# Public at https://bring.meininger.cloud/mcp on the istio-ingress gateway
-# of tethys, TLS from the *.meininger.cloud wildcard certificate.
+# Public at https://bring.meininger.cloud on the istio-ingress gateway of
+# tethys, TLS from the *.meininger.cloud wildcard certificate.
 #
-# The API key is the only credential: there is no browser surface and no
-# Ory login in front of it. tethys rejects every request to this host
-# that carries no Authorization header at the gateway, before it reaches
-# the pod (base-setup/workloads/bring-mcp/public-gate.yaml). Clients
-# therefore send "Authorization: Bearer <key>"; X-API-Key alone is
-# refused publicly.
+# The whole host goes to the app: the MCP endpoint (/mcp), the OAuth
+# endpoints and metadata (/.well-known/*, /authorize, /token, /register,
+# /revoke) and the Bring! login page (/login). The app itself decides who
+# gets in -- every MCP request needs an OAuth access token it issued.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
