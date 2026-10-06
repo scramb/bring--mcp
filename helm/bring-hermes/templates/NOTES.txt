@@ -1,7 +1,7 @@
 bring-hermes is deployed. 🛒
 
-The MCP endpoint is served at path "{{ .Values.config.mcpPath }}" and requires an
-API key (Authorization: Bearer <key>  or  X-API-Key: <key>).
+The MCP endpoint is {{ .Values.config.publicUrl }}{{ .Values.config.mcpPath }}.
+Clients sign in via OAuth with their own Bring! account (login page /login).
 
 {{- if .Values.ingress.enabled }}
 
@@ -31,19 +31,19 @@ Then the MCP endpoint is at:  http://127.0.0.1:8080{{ .Values.config.mcpPath }}
 {{- end }}
 
 Endpoints:
-  POST {{ .Values.config.mcpPath }}   -> MCP (requires API key)
+  POST {{ .Values.config.mcpPath }}   -> MCP (requires an OAuth access token)
   GET  /healthz       -> liveness (unauthenticated)
-  GET  /readyz        -> 200 once logged in to Bring!, else 503
+  GET  /readyz        -> 200 while the database is reachable, else 503
 
-{{- if not .Values.bring.existingSecret }}
+{{- if not .Values.existingSecret }}
 
 NOTE: credentials were taken from chart values and stored in a Secret named
 "{{ include "bring-hermes.fullname" . }}". For production, set
-`bring.existingSecret` to reference a Secret you manage instead.
+`existingSecret` to reference a Secret you manage instead.
 {{- else }}
 
-Using existing Secret: {{ .Values.bring.existingSecret }}
-(must contain keys: BRING_EMAIL, BRING_PASSWORD, MCP_API_KEY)
+Using existing Secret: {{ .Values.existingSecret }}
+(must contain keys: DATABASE_URL, TOKEN_ENCRYPTION_KEY)
 {{- end }}
 
 Run the bundled connection test:

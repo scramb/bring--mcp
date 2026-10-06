@@ -3,10 +3,11 @@ kind: Kustomization
 # The deployment of bring-hermes on tethys (github.com/scramb/tethys).
 # Flux there fetches ./deploy from the master branch of this repo and
 # applies it into the namespace bring-mcp; a rollout is a commit here
-# (deploy/README.md). Namespace, isolation and the guard on the public
-# gateway stay in tethys, base-setup/workloads/bring-mcp.
+# (deploy/README.md). Namespace and isolation stay in tethys,
+# base-setup/workloads/bring-mcp.
 namespace: bring-mcp
 resources:
+  - database.yaml
   - credentials.yaml
   - deployment.yaml
   - service.yaml
@@ -16,4 +17,4 @@ resources:
 # repo, never "latest". No image automation.
 images:
   - name: ghcr.io/scramb/bring--mcp
-    newTag: "0.3.0"
+    newTag: "0.4.0"

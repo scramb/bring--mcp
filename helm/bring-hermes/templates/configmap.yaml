@@ -10,4 +10,6 @@ data:
   MCP_PATH: {{ .Values.config.mcpPath | quote }}
   LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   MCP_JSON_RESPONSE: {{ .Values.config.jsonResponse | quote }}
-  BRING_DEFAULT_LIST: {{ .Values.config.defaultList | quote }}
+  PUBLIC_URL: {{ required "config.publicUrl is required" .Values.config.publicUrl | quote }}
+  ACCESS_TOKEN_TTL: {{ .Values.config.accessTokenTtl | quote }}
+  REFRESH_TOKEN_TTL: {{ .Values.config.refreshTokenTtl | quote }}

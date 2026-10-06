@@ -1,26 +1,39 @@
-"""FastMCP server definition: the tools exposed to MCP clients."""
+"""MCP server definition: the tools exposed to MCP clients.
+
+Every tool acts on the Bring! account of the caller: the OAuth access token's
+subject is the Bring! user uuid linked at login (see :mod:`oauth`).
+"""
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
 from bring_api import BringItem
 from bring_api.exceptions import BringException
-from mcp.server.fastmcp import FastMCP
+from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.provider import OAuthAuthorizationServerProvider
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
+from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel, Field
 
-from .bring_client import BringClient
+from .bring_client import BringAccount, BringSessionExpired, BringSessions
 from .config import Config
+from .oauth import SCOPE
 from .scaling import compute_factor, scale_quantity
+from .store import Store
 
 _LOGGER = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 INSTRUCTIONS = (
     "Tools to manage Bring! shopping lists. Use `add_recipe` to put all "
     "ingredients of a recipe onto a list in one call, passing the amount of "
     "each ingredient in its `quantity` field (e.g. '500 g', '2', '1 EL'); this "
     "is stored as the item's specification in Bring!. When a list is not "
-    "specified, the configured default list is used."
+    "specified, the user's first list is used."
 )
 
 
@@ -37,23 +50,50 @@ class RecipeItem(BaseModel):
     )
 
 
-def build_mcp(config: Config, client: BringClient) -> FastMCP:
-    """Create the FastMCP instance and register all tools against ``client``."""
-    mcp = FastMCP(
+def build_mcp(
+    config: Config,
+    store: Store,
+    sessions: BringSessions,
+    provider: OAuthAuthorizationServerProvider,
+) -> MCPServer:
+    """Create the MCP server, wire OAuth and register all tools."""
+    mcp = MCPServer(
         name="bring-hermes",
         instructions=INSTRUCTIONS,
-        host=config.host,
-        port=config.port,
-        streamable_http_path=config.mcp_path,
-        json_response=config.json_response,
-        stateless_http=True,
+        auth_server_provider=provider,
+        auth=AuthSettings(
+            issuer_url=config.public_url,  # type: ignore[arg-type]
+            resource_server_url=config.resource_url,  # type: ignore[arg-type]
+            client_registration_options=ClientRegistrationOptions(
+                enabled=True, valid_scopes=[SCOPE], default_scopes=[SCOPE]
+            ),
+            revocation_options=RevocationOptions(enabled=True),
+            # Tokens are opaque and only ever issued by this server for this
+            # resource; clients that omit the RFC 8707 indicator still work.
+            validate_token_resource=False,
+        ),
+        log_level=config.log_level,  # type: ignore[arg-type]
     )
+
+    async def run(call: Callable[[BringAccount], Awaitable[T]]) -> T:
+        """Run ``call`` against the caller's Bring! account."""
+        token = get_access_token()
+        if token is None or token.subject is None:
+            raise ValueError("Not signed in")
+        try:
+            return await call(await sessions.get(token.subject))
+        except BringSessionExpired as exc:
+            # Drop the OAuth grant too, so the client is sent through the login again.
+            await store.revoke_account(token.subject)
+            raise ValueError(
+                "The Bring! session has expired. Reconnect the Bring! connector to sign in again."
+            ) from exc
 
     @mcp.tool()
     async def list_shopping_lists() -> str:
         """List all Bring! shopping lists on the account, with their UUIDs."""
         try:
-            lists = await client.get_lists(refresh=True)
+            lists = await run(lambda c: c.get_lists(refresh=True))
         except BringException as exc:
             raise ValueError(f"Could not load shopping lists: {exc}") from exc
         if not lists:
@@ -64,10 +104,10 @@ def build_mcp(config: Config, client: BringClient) -> FastMCP:
     async def get_list_items(shopping_list: str | None = None) -> str:
         """Show the items currently on a Bring! list (name + quantity).
 
-        `shopping_list` may be a list name or UUID; omit it to use the default list.
+        `shopping_list` may be a list name or UUID; omit it to use the first list.
         """
         try:
-            uuid, items = await client.list_items(shopping_list)
+            uuid, items = await run(lambda c: c.list_items(shopping_list))
         except (BringException, ValueError) as exc:
             raise ValueError(f"Could not read the shopping list: {exc}") from exc
         return f"Items on list {uuid}:\n{_format_purchases(items)}"
@@ -79,10 +119,10 @@ def build_mcp(config: Config, client: BringClient) -> FastMCP:
         """Add a single item to a Bring! list.
 
         `quantity` is the amount incl. unit (e.g. '500 g') and is stored as the
-        item specification. `shopping_list` is a name or UUID; omit for default.
+        item specification. `shopping_list` is a name or UUID; omit for the first list.
         """
         try:
-            uuid = await client.add_item(name, quantity, shopping_list)
+            uuid = await run(lambda c: c.add_item(name, quantity, shopping_list))
         except (BringException, ValueError) as exc:
             raise ValueError(f"Could not add item: {exc}") from exc
         suffix = f" ({quantity.strip()})" if quantity.strip() else ""
@@ -102,7 +142,7 @@ def build_mcp(config: Config, client: BringClient) -> FastMCP:
         `base_servings` (what the recipe yields) and `target_servings` (what you
         want) are given, numeric quantities are scaled accordingly. `recipe` is
         an optional name for the confirmation message. `shopping_list` is a name
-        or UUID; omit for the default list.
+        or UUID; omit for the first list.
         """
         if not items:
             raise ValueError("`items` must contain at least one ingredient")
@@ -114,7 +154,7 @@ def build_mcp(config: Config, client: BringClient) -> FastMCP:
             bring_items.append(BringItem(itemId=item.name, spec=spec))
             summary_lines.append(f"- {item.name}" + (f" — {spec}" if spec.strip() else ""))
         try:
-            uuid = await client.add_items(bring_items, shopping_list)
+            uuid = await run(lambda c: c.add_items(bring_items, shopping_list))
         except (BringException, ValueError) as exc:
             raise ValueError(f"Could not add recipe: {exc}") from exc
 
@@ -141,11 +181,11 @@ def build_mcp(config: Config, client: BringClient) -> FastMCP:
 
         Optionally scale quantities with `base_servings`/`target_servings` (if
         `base_servings` is omitted, the recipe's own yield is used). `shopping_list`
-        is a name or UUID; omit for the default list.
+        is a name or UUID; omit for the first list.
         """
         try:
-            uuid, template, items = await client.import_recipe(
-                url, base_servings, target_servings, shopping_list
+            uuid, template, items = await run(
+                lambda c: c.import_recipe(url, base_servings, target_servings, shopping_list)
             )
         except (BringException, ValueError) as exc:
             raise ValueError(f"Could not import recipe: {exc}") from exc
@@ -166,10 +206,10 @@ def build_mcp(config: Config, client: BringClient) -> FastMCP:
     async def remove_item(name: str, shopping_list: str | None = None) -> str:
         """Remove an item from a Bring! list entirely.
 
-        `shopping_list` is a name or UUID; omit for the default list.
+        `shopping_list` is a name or UUID; omit for the first list.
         """
         try:
-            uuid = await client.remove_item(name, shopping_list)
+            uuid = await run(lambda c: c.remove_item(name, shopping_list))
         except (BringException, ValueError) as exc:
             raise ValueError(f"Could not remove item: {exc}") from exc
         return f"Removed '{name}' from list {uuid}."
@@ -178,10 +218,10 @@ def build_mcp(config: Config, client: BringClient) -> FastMCP:
     async def complete_item(name: str, shopping_list: str | None = None) -> str:
         """Mark an item as bought (moves it to the 'recently used' list).
 
-        `shopping_list` is a name or UUID; omit for the default list.
+        `shopping_list` is a name or UUID; omit for the first list.
         """
         try:
-            uuid = await client.complete_item(name, shopping_list)
+            uuid = await run(lambda c: c.complete_item(name, shopping_list))
         except (BringException, ValueError) as exc:
             raise ValueError(f"Could not complete item: {exc}") from exc
         return f"Marked '{name}' as bought on list {uuid}."

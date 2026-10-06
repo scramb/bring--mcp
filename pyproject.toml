@@ -1,6 +1,6 @@
 [project]
 name = "bring-hermes"
-version = "0.1.0"
+version = "0.4.0"
 description = "MCP server exposing the Bring! shopping list API (recipes with correct quantities) over Streamable HTTP."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -8,12 +8,15 @@ license = { text = "MIT" }
 authors = [{ name = "bring-hermes" }]
 keywords = ["mcp", "bring", "shopping-list", "model-context-protocol"]
 dependencies = [
-    "bring-api>=1.1.2",
-    "mcp>=1.28.1",
+    "bring-api==1.1.2",
+    "mcp>=2.3,<3",
     "uvicorn[standard]>=0.30",
     "aiohttp>=3.10",
     "starlette>=0.40",
     "pydantic>=2.7",
+    "asyncpg>=0.30",
+    "cryptography>=43",
+    "python-multipart>=0.0.9",
 ]
 
 [project.scripts]

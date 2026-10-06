@@ -1,43 +1,42 @@
 # Default values for bring-hermes.
 # This is a YAML-formatted file. Override with `--set key=value` or `-f my-values.yaml`.
 
-replicaCount: 2
+# One replica: Bring! sessions and the login rate limit live in memory.
+replicaCount: 1
 
 image:
   repository: ghcr.io/scramb/bring--mcp
   pullPolicy: IfNotPresent
   # Defaults to the chart's appVersion when empty.
-  tag: "0.3.0"
+  tag: "0.4.0"
 
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-# --- Bring! account + MCP auth --------------------------------------------
-# These become a Secret (BRING_EMAIL, BRING_PASSWORD, MCP_API_KEY) consumed by
-# the pod. For production, prefer `existingSecret` so credentials never live in
-# values files / Helm release history.
-bring:
-  # Name of a pre-existing Secret containing the keys BRING_EMAIL,
-  # BRING_PASSWORD and MCP_API_KEY. When set, the chart does NOT create a Secret
-  # and the three fields below are ignored.
-  existingSecret: "bring-hermes-credentials"
-  email: ""
-  password: ""
-  # One or more API keys clients must present (comma-separated for rotation).
-  apiKey: ""
+# --- Secrets ---------------------------------------------------------------
+# DATABASE_URL (Postgres for OAuth state and linked Bring! accounts) and
+# TOKEN_ENCRYPTION_KEY (Fernet key for the stored Bring! refresh tokens).
+# For production, prefer `existingSecret` so they never live in values files /
+# Helm release history.
+existingSecret: ""
+secrets:
+  databaseUrl: ""
+  tokenEncryptionKey: ""
 
 # --- Non-secret app config (rendered into a ConfigMap) --------------------
 config:
+  # Public base URL (no trailing slash); the OAuth issuer. REQUIRED.
+  publicUrl: ""
   # Container port the app binds to.
   port: 8080
   mcpPath: /mcp
   logLevel: INFO
   # MCP response mode. true = plain-JSON Streamable HTTP responses (default).
-  # Set to false only if you need SSE-framed responses for streaming clients.
   jsonResponse: true
-  # Default shopping list (name or UUID). Empty = use the first list.
-  defaultList: ""
+  # Lifetimes of the issued OAuth tokens, in seconds.
+  accessTokenTtl: 3600
+  refreshTokenTtl: 7776000
 
 # Extra environment variables (list of {name, value} / valueFrom).
 extraEnv: []
@@ -102,11 +101,10 @@ httpRoute:
   # The Gateway(s) this route attaches to. REQUIRED when enabled.
   parentRefs:
     - name: istio-ingress
-      namespace: istio-system   # optional (defaults to release namespace)
+    #  namespace: istio-system   # optional (defaults to release namespace)
     #  sectionName: https          # optional: a specific Gateway listener
     #   port: 443                   # optional
-  hostnames:
-    - bring.meininger.cloud
+  hostnames: []
   # Path matches for the default rule. The backend is this chart's Service,
   # wired automatically.
   matches:

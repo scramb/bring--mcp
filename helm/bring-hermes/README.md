@@ -1,20 +1,19 @@
 # bring-hermes Helm chart
 
 Deploy [**bring-hermes**](../../README.md) — an MCP server for the Bring!
-shopping list API — to Kubernetes. TLS is terminated at the Ingress; the app
-runs stateless behind an API key, so it scales horizontally without session
-affinity.
+shopping list API — to Kubernetes. TLS is terminated at the Ingress or
+Gateway. Users sign in via OAuth with their own Bring! account; the app keeps
+its state in Postgres, which the chart does **not** bring — point
+`DATABASE_URL` at an existing one. Run one replica.
 
 ## TL;DR
 
 ```bash
 helm install bring-hermes ./helm/bring-hermes \
   --namespace bring-hermes --create-namespace \
-  --set image.repository=ghcr.io/your-org/bring-hermes \
-  --set image.tag=0.1.0 \
-  --set bring.email='you@example.com' \
-  --set bring.password='your-bring-password' \
-  --set bring.apiKey="$(openssl rand -hex 32)"
+  --set config.publicUrl=https://bring.example.com \
+  --set secrets.databaseUrl='postgres://user:pass@postgres:5432/bring' \
+  --set secrets.tokenEncryptionKey="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
 ```
 
 > For production, **don't** pass credentials on the CLI — use an existing Secret
@@ -30,7 +29,8 @@ the git tag (and the image tag):
 helm install bring-hermes \
   oci://ghcr.io/<owner>/charts/bring-hermes --version <version> \
   --namespace bring-hermes --create-namespace \
-  --set bring.existingSecret=bring-hermes-credentials
+  --set config.publicUrl=https://bring.example.com \
+  --set existingSecret=bring-hermes-credentials
 ```
 
 The chart's default `image.repository` and `appVersion` already point at the
@@ -38,18 +38,17 @@ matching released image, so you don't need to set the image tag yourself.
 
 ## Install with an existing Secret (recommended)
 
-Create a Secret with the three required keys, then reference it:
+Create a Secret with the two required keys, then reference it:
 
 ```bash
 kubectl -n bring-hermes create secret generic bring-hermes-credentials \
-  --from-literal=BRING_EMAIL='you@example.com' \
-  --from-literal=BRING_PASSWORD='your-bring-password' \
-  --from-literal=MCP_API_KEY="$(openssl rand -hex 32)"
+  --from-literal=DATABASE_URL='postgres://user:pass@postgres:5432/bring' \
+  --from-literal=TOKEN_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
 
 helm install bring-hermes ./helm/bring-hermes \
   --namespace bring-hermes --create-namespace \
-  --set bring.existingSecret=bring-hermes-credentials \
-  --set image.tag=0.1.0
+  --set config.publicUrl=https://bring.example.com \
+  --set existingSecret=bring-hermes-credentials
 ```
 
 ## Enable the Ingress (with TLS)
@@ -77,8 +76,8 @@ helm upgrade --install bring-hermes ./helm/bring-hermes \
   -n bring-hermes -f my-values.yaml
 ```
 
-The MCP endpoint is then `https://bring-hermes.example.com/mcp` (send
-`Authorization: Bearer <MCP_API_KEY>`).
+The MCP endpoint is then `https://bring-hermes.example.com/mcp`; set
+`config.publicUrl` to `https://bring-hermes.example.com` to match.
 
 ## Expose via Gateway API (HTTPRoute) instead of Ingress
 
@@ -112,20 +111,21 @@ helm upgrade --install bring-hermes ./helm/bring-hermes \
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `replicaCount` | `2` | Replicas (ignored when `autoscaling.enabled`). |
+| `replicaCount` | `1` | Replicas; keep at 1 (sessions and login rate limit are in memory). |
 | `image.repository` | `ghcr.io/your-org/bring-hermes` | Image repository. |
 | `image.tag` | `""` (chart `appVersion`) | Image tag. |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy. |
 | `imagePullSecrets` | `[]` | Pull secrets for private registries. |
-| `bring.existingSecret` | `""` | Name of an existing Secret with `BRING_EMAIL`, `BRING_PASSWORD`, `MCP_API_KEY`. If set, the next three are ignored. |
-| `bring.email` | `""` | Bring! account email (used only if no `existingSecret`). |
-| `bring.password` | `""` | Bring! account password. |
-| `bring.apiKey` | `""` | API key(s) clients must present (comma-separated for rotation). |
+| `existingSecret` | `""` | Name of an existing Secret with `DATABASE_URL` and `TOKEN_ENCRYPTION_KEY`. If set, `secrets.*` is ignored. |
+| `secrets.databaseUrl` | `""` | Postgres URL (used only if no `existingSecret`). |
+| `secrets.tokenEncryptionKey` | `""` | Fernet key for the stored Bring! refresh tokens. |
+| `config.publicUrl` | `""` | **Required.** Public base URL; the OAuth issuer. |
 | `config.port` | `8080` | Container port. |
 | `config.mcpPath` | `/mcp` | Path the MCP endpoint is served at. |
 | `config.logLevel` | `INFO` | Log level. |
 | `config.jsonResponse` | `true` | Plain-JSON Streamable HTTP responses; `false` = SSE-framed. |
-| `config.defaultList` | `""` | Default list (name or UUID); empty = first list. |
+| `config.accessTokenTtl` | `3600` | Access token lifetime (seconds). |
+| `config.refreshTokenTtl` | `7776000` | Refresh token lifetime (seconds). |
 | `extraEnv` | `[]` | Additional env vars. |
 | `service.type` | `ClusterIP` | Service type. |
 | `service.port` | `80` | Service port. |
